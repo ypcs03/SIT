@@ -1,2 +1,1 @@
-# SIT
-Coding of 2014~2015
+On the way!
