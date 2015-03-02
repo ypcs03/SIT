@@ -362,52 +362,6 @@ class Algorithm
             });
             for(int j = bucket.get(i).size() -1 ; j >= 0; j --)
               result.append(bucket.get(i).get(j));
-
-            /*            String first = bucket.get(i).get(0);
-                          String last = null;
-
-                          if(first.length() == 1 && bucket.get(i).size() > 1)
-                          {
-                          int flag = 1;       //The single character is existed
-                          int j = bucket.get(i).size() - 1;
-                          for(; j >= 0 && flag == 1 ; j --)
-                          {
-                          last = bucket.get(i).get(j);
-
-                          int t = 1;
-                          while(t < last.length() && last.charAt(t) == first.charAt(0))
-                          {
-                          t ++;
-                          }
-
-                          if(t< last.length() && last.charAt(t) > first.charAt(0))
-                          result.append(last);
-                          else
-                          {
-                          result.append(first);
-                          flag = 0;
-                          bucket.get(i).remove(0);
-                          }
-                          }
-
-                          while(j >= 0)
-                          {
-                          System.out.println(j);
-                          result.append(bucket.get(i).get(j));
-                          j --;
-                          }
-                          }
-
-                          else
-                          {
-                          for(int j = bucket.get(i).size() - 1; j >= 0; j --)
-                          {
-                          result.append(bucket.get(i).get(j));
-                          }
-                          }
-                          }
-                          System.out.println(result); 
-             */     
     }
 
     System.out.println(result);
@@ -461,9 +415,6 @@ void PossibleSequence(ArrayList<Integer> sequence, int arry[])
             }
         }
 
-        //            System.out.println("Output the array");
-        //            for(int m = 0; m < temp.length; m ++)
-        //                System.out.print(temp[m] + " ");
         PossibleSequence(sequence, temp);
         sequence.remove(sequence.size()-1);
     }
