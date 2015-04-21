@@ -1,0 +1,34 @@
+/***************************************************************/
+/*****Group members*********************************************
+*	Peng Yin (pyin) 
+*	Qing Xu  (qxu4)
+*	Xiaoyan Zheng (xzheng9)
+***************************************************************/
+
+EC2-backup
+
+usage: ec2-backup [-h] [-m method] [-v volume-id] dir
+	-h help about this process.
+	-m method to back up, dd or rsync. default value is dd.
+	-v volume-id, back up to this volume. If not provided, then create a new one.
+
+exit status:
+	succeed: return 0
+	failed: return value > 0
+
+Environment variable:
+EC2_BACKUP_VERBOSE:  set to print the process information during the run.
+EC2_BACKUP_FLAGS_SSH: set to provide the key to login the instance
+EC2_BACKUP_FLAGS_AWS: set to provide the extra choice in creating instance, like the key-pair, instance-type.
+
+Considerations:
+	1. user may add multiple directories in the command line instead of just one, we handled with multiple directories path listed in the input.
+	2. Invalid parameter input would cause the process exit.
+	3. If user provide a volume-id:
+		Test the zone of the volume, whether it matched the predefined.
+		There may have already existed file system with data in the volume. 
+		Back up won't erase the data already existed there!
+		If the available space in user's volume isn't large enough for back up, then exit.
+	4. Detect the access permission before backup: for each file the read permission and for each directory execute permission is needed. 
+	5. For each operate on the aws, the process will wait until it goes into the desired state to make sure the operation is well done.
+	6. Any time the error occurred will cause the process exit. And the instance will be terminated if it has already created, the volume will be delete if has already created by the process.

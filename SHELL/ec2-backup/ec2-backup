@@ -1,0 +1,420 @@
+#!/bin/bash
+
+#The default value for backup processing
+region="us-east-1"
+image_id="ami-ee4c0f86"
+key=""
+Volume_id=""
+method="dd"
+instanceid=""
+log_name="bitnami"
+security_group=""
+Volum_from_user=0
+file_system_existed=0
+device_des="/dev/sdx"
+device_ins="/dev/xvdx"
+total_size_MB=0
+backuped_file=""
+
+#Output the procedure message based on the EC2_BACKUP_VERBOSE
+function m_verbose()
+{
+    if [ ! -z ${EC2_BACKUP_VERBOSE+s} ]; then
+        echo `date +%T` $*
+    fi
+}
+
+#Error occurred during the procedure
+function exit_error()
+{
+    #terminate the instance
+    if [ "$instanceid" != "" ]; then
+        m_verbose "Operation failed, terminating the instance."
+        aws ec2 terminate-instances --instance-ids $instanceid > /dev/null 2>&1
+    fi
+
+    #detach the volume and delete it if it is created by this process
+    if [ "$Volume_id" != "" ]; then
+
+    	local count=0
+    	#waiting for the detaching
+    	aws ec2 describe-volumes --volume-id $Volume_id --query 'Volumes[*].[State]' --output text | grep "available" > /dev/null 2>&1
+
+    	while [ $? -ne 0 ] && [ $count -lt 5 ]; do
+        	sleep 10s
+        	let count+=1
+        	if [ $count -eq 5 ]; then
+            	echo "Detach the volume $id_vol failed!"
+            	exit_error 10
+        	fi
+        	aws ec2 describe-volumes --volume-id $Volume_id --query 'Volumes[*].[State]' --output text | grep "available" > /dev/null 2>&1
+    	done
+
+    	if [ $Volum_from_user -eq 0 ]; then
+    		#delete the volume
+    		m_verbose "deleting the volume $Volume_id"
+			aws ec2 delete-volume --volume-id $Volume_id > /dev/null 2>&1
+    	fi
+    fi
+    
+    exit $1
+}
+
+#input the dir, check the read permission for the whole directory
+#Note: the symbol link/ hard link
+function check()
+{
+    local path=$1
+    
+    if [ -d "$path" ]; then
+        if [ ! -x "$path" ]; then
+            echo "Open permission denied: $path"
+            exit_error 9
+        else
+            #echo "true $path"
+            for dir in `ls $path`; do
+                if [ -z ${path##*/} ]; then
+ 			#		echo "checking $path$dir"
+                	check ${path}$dir
+                else
+            #    	echo "checking $path/$dir"
+                	check ${path}/$dir
+                fi
+            done
+        fi
+    elif [ -f "$path" ] && [ ! -r "$path" ]; then
+        echo "Permission denied: $path"
+        exit_error 9
+    fi
+}
+
+#Attach the volume
+#If the volume provided by the user, then detect the file system and available space
+function Volue_prepare()
+{
+    local id_ins=$1
+    local id_vol=$2
+    local ipadd=$3
+
+    sleep 20s
+
+    if [ $Volum_from_user -eq 1 ]; then
+        aws ec2 describe-volumes --volume-id $Volume_id --query 'Volumes[*].[State]' --output text | grep "in-use" > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "The volume provided is in use, please change another one!"
+            exit_error 5
+        fi
+    fi
+
+    count=0 #Try 4 times (40 seconds) for the attach
+    aws ec2 attach-volume --volume-id $id_vol --instance-id $id_ins --device $device_des > /dev/null 2>&1
+    while [ $? -ne 0 ] && [ $count -lt 4 ]; do
+        sleep 10s
+        let count+=1
+        if [ $count -eq 4 ]; then
+            echo "Attach the volume $id_vol failed!"
+            exit_error 10
+        fi    
+        echo "Attach volume failed, retrying $count"
+        aws ec2 attach-volume --volume-id $id_vol --instance-id $id_ins --device $device_des > /dev/null 2>&1
+    done
+
+    count=0
+    aws ec2 describe-volumes --volume-ids $Volume_id --output text --query 'Volumes[*].[Attachments[*].[State]]' | grep "attached" > /dev/null 2>&1
+    while [ $? -ne 0 ] && [ $count -lt 4 ]; do
+        sleep 10s
+        let count+=1
+        if [ $count -eq 4 ]; then
+            echo "Attach the volume $id_vol failed!"
+            exit_error 10
+        fi
+    aws ec2 describe-volumes --volume-ids $Volume_id --output text --query 'Volumes[*].[Attachments[*].[State]]' | grep "attached" > /dev/null 2>&1    
+    done
+
+   	#Test the ssh key  
+    count=0
+    ssh -q $EC2_BACKUP_FLAGS_SSH -oStrictHostKeyChecking=no ${log_name}@$ipadd exit > /dev/null 2>&1
+
+    while [ $? -ne 0 ] && [ $count -lt 30 ]; do
+        sleep 10s
+        let count+=1
+        if [ $count -eq 30 ]; then
+        	echo "Failed to login, please check the login key, the key path in the EC2_BACKUP_FLAGS_SSH shouldn't contain ~"
+        	exit_error 5
+        fi
+        ssh -q $EC2_BACKUP_FLAGS_SSH -oStrictHostKeyChecking=no ${log_name}@$ipadd exit  > /dev/null 2>&1
+    done
+
+    #Test the volume provided, if there already existed an file system
+    if [ $Volum_from_user -eq 1 ]; then
+    		ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo file -s $device_ins | grep "filesystem" > /dev/null 2>&1
+    		if [ $? -eq 0 ]; then
+    			file_system_existed=1
+    			ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo mount $device_ins /mnt
+    			avalabile_space=$(ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd df -BMB | grep "$device_ins" | awk '{print $4}' | grep -o "[0-9]*") #MB 1000*1000
+    			
+    			count=0
+    			ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo umount /mnt
+
+    			while [ $? -ne 0 ] && [ $count -lt 5 ]; do
+            		sleep 5s
+            		if [ $count -eq 5 ]; then
+            			echo "Failed to login"
+            			exit_error 5
+            		fi
+            		ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo umount /mnt
+    			done
+
+    			if [ $avalabile_space -lt $total_size_MB ]; then
+    				echo "Voluem provided didn't have enough space !"
+    				exit_error 5
+    			fi
+
+    		else
+    			file_system_existed=0	
+    		fi
+    fi
+
+    #rsync need a file system
+    if [ $method == "rsync" ] && [ $file_system_existed -eq 0 ] ; then
+    	ssh -oStrictHostKeyChecking=no $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo mkfs.ext4 $device_ins > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            m_verbose "Created file system"	    	
+        else
+            sleep 10s
+            ssh -oStrictHostKeyChecking=no $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo mkfs.ext4 $device_ins > /dev/null 2>&1
+        fi
+
+    fi
+}
+
+#back up with the dd method
+function back_dd(){
+    local ipadd=$1
+    shift 
+    local dirx=$*
+    
+    m_verbose "Backing up with tar ..."
+
+    if [ $file_system_existed -eq 1 ]; then
+    	backuped_file=aws_backup_$(date +%Y%m%d_%k:%M).tar.gz
+
+    	ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo mount $device_ins /mnt
+    	if [ $? -ne 0 ]; then
+    		sleep 30s
+    		ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo mount $device_ins /mnt
+    	fi
+
+    	tar czf - $dirx | ssh -oStrictHostKeyChecking=no $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo dd of=/mnt/$backuped_file >/dev/null  2>&1
+    	sleep 5s
+    	ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo umount /mnt
+    else
+    	tar czf - $dirx | ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo dd of=$device_ins >/dev/null 2>&1
+	fi
+
+    if [ $? -ne 0 ]; then
+        echo "Back up with tar failed!"
+        exit_error 10
+    fi
+}
+
+#back up with the rsync method
+function back_rsync(){
+    local ipadd=$1
+    shift
+    local dirx=$*
+
+    m_verbose "Backing up with rsync..."
+    
+	ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo mount $device_ins /mnt
+	rsync -ae "ssh $EC2_BACKUP_FLAGS_SSH" --rsync-path="sudo rsync" $dirx ${log_name}@$ipadd:/mnt
+
+    if [ $? -ne 0 ]; then
+        echo "Back up with rsync failed!"
+        exit_error 10
+    fi
+
+    count=0
+	ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo umount /mnt
+
+	while [ $? -ne 0 ] && [ $count -lt 5 ]; do
+            sleep 5s
+            if [ $count -eq 5 ]; then
+            	echo "Failed to login"
+            	exit_error 5
+            fi
+            ssh $EC2_BACKUP_FLAGS_SSH ${log_name}@$ipadd sudo umount /mnt
+    done
+}
+
+#Read the parameter 
+while getopts ':hm:v:' opt; do
+    case $opt in
+        h)
+            echo "usage: backup [-h] [-m method] [-v volumeid] dir"
+            exit 0  
+        ;;
+        m)
+            method=$OPTARG
+        ;;
+        v)
+            Volume_id=$OPTARG         
+            Volum_from_user=1
+        ;;
+        ?)
+            echo 'Usage: backup [-h] [-m method] [-v volumeid] dir'
+            exit 2
+        ;;
+    esac
+done
+
+shift $(expr $OPTIND - 1)
+
+#consider multiple dirs are listed
+if [ $# -lt 1 ]; then
+    echo "Directory isn't listed"
+    exit_error 5
+fi
+
+#set(if not specified by user) and verify if the method is valid
+if [ "$method" != "dd" ] && [ "$method" != "rsync" ]; then
+    echo "Invalid input: $method for '-m'"
+    exit_error 5
+fi
+
+#connect to the instance and create the volume and mount it
+#using the original command from aws, and assume user did't alias the command
+m_verbose "Testing for the configuration for backup..."
+aws ec2 describe-availability-zones | grep "$region" > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "please change the region to $region to launch the instance"
+    exit_error 5
+fi
+
+#check whether the default security-group or allowed the ssh
+echo $EC2_BACKUP_FLAGS_AWS | grep "security-group"  > /dev/null 2>&1
+if [ $? -ne 0 ] || [ -z ${EC2_BACKUP_FLAGS_AWS+s} ]; then
+    var=$(aws ec2 describe-security-groups --group-names default --filters Name=ip-permission.to-port,Values=22 Name=ip-permission.from-port,Values=22 --query 'SecurityGroups[*].{Name:GroupName}')  > /dev/null 2>&1 #test the default security group for ssh permission
+    if [ -z "$var" ]; then
+        echo "Please set the security group, as the default security-group doesn't allow ssh operation"
+        exit 10
+    else
+    	m_verbose "Creating the instance of $image_id"
+        instanceid=$(aws ec2 run-instances --image-id $image_id --count 1 --output text --query 'Instances[*].InstanceId') > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
+        	echo "Failed to run instance, please check your environment variable"
+        	exit_error 10
+        fi
+    fi
+else
+	m_verbose "Creating the instance of $image_id"
+    instanceid=$(aws ec2 run-instances --image-id $image_id --count 1 $EC2_BACKUP_FLAGS_AWS --output text --query 'Instances[*].InstanceId') > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        	echo "Failed to run instance, please check your environment variable"
+        	exit_error 10
+    fi
+fi
+
+m_verbose "Waiting for the instance to initialize..."
+#passed=$(aws ec2 describe-instance-status --instance-id $instanceid --query 'InstanceStatuses[*].[SystemStatus.Details[*].Status, InstanceStatus.Details[*].Status]' --output text | grep -wc "passed")
+
+# wait for the instance to start
+#acquire the ip and region of the instance
+eval $(aws ec2 describe-instances --instance-ids $instanceid --query 'Reservations[*].Instances[*].[PublicIpAddress, Placement.AvailabilityZone, ImageId]' --output text | grep "$image_id" | awk '{ print "ipaddress="$1, "zone="$2 }')
+count=0
+while [ -z $ipaddress ] || [ $ipaddress == "None" ]; do
+	sleep 30s
+    let count+=1
+    if [ $count -eq 10 ]; then
+        echo "Failed to create instance"
+        exit_error 10
+    fi
+
+	eval $(aws ec2 describe-instances --instance-ids $instanceid --query 'Reservations[*].Instances[*].[PublicIpAddress, Placement.AvailabilityZone, ImageId]' --output text | grep "$image_id" | awk '{ print "ipaddress="$1, "zone="$2 }')
+done
+m_verbose "Created instance: $instanceid, $ipaddress, $zone "
+
+#consider multiple directories listed
+#calculate the total size of all the directories
+m_verbose "Checking for the access permission for the directory"
+total_size=0
+for dir in $*; do
+    if [ -d $dir ] || [ -f $dir ]; then
+    	check $dir
+        size=$(du -d0 -b | cut -f1)
+        total_size=`expr $size + $total_size`
+    else
+        echo "Invalid path or file name: $dir"      
+        exit_error 5
+    fi
+done
+
+total_size_MB=`expr $total_size \* 2 / 1000 / 1000`
+total_size=`expr $total_size \* 2 / 1000 / 1000 / 1000`
+if [ $total_size -eq 0 ]; then
+	total_size=1
+fi
+
+if [ -z "$Volume_id" ]; then
+	m_verbose "Creating the EBS volume of ${total_size}G in $zone"
+    Volume_id=$(aws ec2 create-volume --size $total_size --availability-zone $zone --query 'VolumeId')
+
+    if [ -z "$Volume_id" ]; then
+    	echo "Create the volume failed"
+    	exit_error 10
+    fi
+    Volume_id=$(echo ${Volume_id//\"/})
+
+    count=0
+    aws ec2 describe-volumes --volume-ids $Volume_id --output text --query 'Volumes[*].State' | grep "available" > /dev/null 2>&1
+
+    while [ $? -ne 0 ] && [ $count -lt 10 ]; do
+    	m_verbose "Waiting for the volume creating"
+   		let count+=1
+    	sleep 10s
+
+    	if [ $count -eq 10 ]; then
+    		echo "Creating volume failed!"
+    		exit_error 5
+    	fi
+
+    	aws ec2 describe-volumes --volume-ids $Volume_id --output text --query 'Volumes[*].State' | grep "available" > /dev/null 2>&1
+    done
+    m_verbose "Created Volume: $Volume_id"
+
+else
+	pre_size=$(aws ec2 describe-volumes --volume-id $Volume_id --query 'Volumes[*].[Size]' --output text)
+	if [ $pre_size -lt $total_size ]; then
+		echo "The volume given isn't large enough to store the file"
+		exit_error 5
+	fi
+
+	aws ec2 describe-volumes --volume-ids $Volume_id --output text --query 'Volumes[*].AvailabilityZone' | grep $region > /dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		echo "The volume provided isn't in the predefined region: $zone "
+		exit_error 5
+	fi
+fi
+
+#Attach the volume and mount, format the device 
+Volue_prepare $instanceid $Volume_id $ipaddress
+
+if [ "$method" == "dd" ]; then
+    back_dd $ipaddress $*
+else
+    back_rsync $ipaddress $*
+fi
+
+#Finished the rsync and detached the volume
+m_verbose "Terminating the instance."
+aws ec2 terminate-instances --instance-ids $instanceid > /dev/null 2>&1
+
+#After finished the backup, umount the device, detach the volume, terminate the instance
+m_verbose "Done!"
+if [ $method == "dd" ]; then
+    echo "$Volume_id"
+else
+    echo "$Volume_id"
+fi
+
+exit 0
