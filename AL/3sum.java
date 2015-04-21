@@ -1,7 +1,7 @@
 /*Main idea:
     sort the array
     from the begin to end, select current element and find the two sum equal to its opposite 
- */
+*/
 
 public class Solution {
     public List<List<Integer>> threeSum(int[] num) {
