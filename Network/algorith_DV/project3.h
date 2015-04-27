@@ -9,6 +9,7 @@
 
 //  In this assignment, we are NOT enabling a mode that causes
 //  the cost of edges to change with time.
+#include <stdlib.h>
 #define LINKCHANGES 0 
 
 //  This is the maximum number of nodes we will ever have.  We MAY not 

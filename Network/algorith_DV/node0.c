@@ -3,6 +3,9 @@
 
 extern int TraceLevel;
 
+//Added by Peng
+extern int NumberOfNodes;
+
 struct distance_table {
   int costs[MAX_NODES][MAX_NODES];
 };
@@ -28,17 +31,78 @@ void    rtupdate7( struct RoutePacket *rcvdpkt ) { }
 void    rtupdate8( struct RoutePacket *rcvdpkt ) { }
 void    rtupdate9( struct RoutePacket *rcvdpkt ) { }
 
+void rtupdate0( struct RoutePacket *rcvdpkt );
+void printdt0( int MyNodeNumber, struct NeighborCosts *neighbor, struct distance_table *dtptr );
 /* students to write the following two routines, and maybe some others */
-
+//Added by Peng
 void rtinit0() {
+    int i, j;
+    struct RoutePacket * first = (struct RoutePacket *)malloc(sizeof(struct RoutePacket));
+    first->sourceid = 0;
+    first->destid = 0;
 
+    //acquire the neighbors
+    neighbor0 = getNeighborCosts(0);
+
+    //initialize the router table
+    for(i = 0; i < NumberOfNodes; i ++)
+        for(j = 0; j < NumberOfNodes; j ++){
+            if(i == j)
+                dt0.costs[i][j] = 0;
+            else
+                dt0.costs[i][j] = INFINITY;
+        }
+
+    for(i = 0; i < NumberOfNodes; i ++){
+        first->mincost[i] = neighbor0->NodeCosts[i];
+    }
+
+    rtupdate0(first);
+}
+
+void print(){
+    int i ,j;
+    for(i = 0; i < 4; i ++){
+        for(j = 0; j < 4; j ++)
+            printf("%d\t", dt0.costs[i][j]);
+        printf("\n");
+    }
 }
 
 
 void rtupdate0( struct RoutePacket *rcvdpkt ) {
+    int i, j, k;
+    int temp;  
 
+    int updated = NO;
+    struct RoutePacket pkt; 
+    
+    //Update the table
+    for(i = 0; i < NumberOfNodes; i ++)
+        for(j = 0; j < NumberOfNodes; j ++){
+            if(dt0.costs[i][j] > rcvdpkt->mincost[j] + dt0.costs[i][rcvdpkt->sourceid]){
+                dt0.costs[i][j] = rcvdpkt->mincost[j] + dt0.costs[i][rcvdpkt->sourceid];
+
+                if(updated == NO && i == 0)
+                    updated = YES;
+            }
+        }
+
+    //create an event to update the neighbour router
+    if(updated == YES){
+        //table should be updated for each neighbor
+        for(i = 1; i < neighbor0->NodesInNetwork; i ++){
+            if(neighbor0->NodeCosts[i] != INFINITY){
+                pkt.sourceid = 0;
+                pkt.destid = i;
+                
+                for(j = 0; j < NumberOfNodes; j ++)
+                    pkt.mincost[j] = dt0.costs[0][j];           
+                toLayer2(pkt);
+            }
+        }
+    }
 }
-
 
 /////////////////////////////////////////////////////////////////////
 //  printdt
