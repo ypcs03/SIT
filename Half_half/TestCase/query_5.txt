@@ -1,0 +1,11 @@
+SELECT ATTRIBUTE(S):
+cust, prod, avg_quant_1, avg_quant_2
+NUMBER OF GROUPING VARIABLES(n):
+2
+GROUPING ATTRIBUTES(V):
+cust, prod
+Func-VECT([F]):
+1_avg_quant, 2_avg_quant 
+SELECT CONDITION-VECT([考]):
+1.cust.equals(cust) and 1.prod.equals(prod)
+!2.cust.equals(cust) and 2.prod.equals(prod)

@@ -69,7 +69,6 @@ void print(){
     }
 }
 
-
 void rtupdate0( struct RoutePacket *rcvdpkt ) {
     int i, j, k;
     int temp;  

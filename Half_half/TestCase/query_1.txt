@@ -1,0 +1,16 @@
+SELECT ATTRIBUTE(S):
+cust, avg_quant_1, avg_quant_2, avg_quant_3
+NUMBER OF GROUPING VARIABLES(n):
+3
+GROUPING ATTRIBUTES(V):
+cust
+Func-VECT([F]):
+1_avg_quant, 2_avg_quant, 3_avg_quant 
+SELECT CONDITION-VECT([考]):
+1.cust.equals(cust) and 1.state.equals("NY")
+2.cust.equals(cust) and 2.state.equals("NJ")
+3.cust.equals(cust) and 3.state.equals("CT")
+HAVING CONDITION(G):
+avg_quant_1 > avg_quant_2 and avg_quant_1 > avg_quant_3
+WHERE CONDITION(W)
+year == 1997

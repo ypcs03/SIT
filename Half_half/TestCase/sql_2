@@ -1,0 +1,17 @@
+drop view v1,v2;
+
+create view v1 as
+select prod,sum(quant) as year_total
+from sales
+where year=1997
+group by prod;
+
+create view v2 as
+select prod, month,sum(quant) as month_total
+from sales
+where year=1997
+group by prod, month;
+
+select v2.prod, v2.month,CAST(v2.month_total AS float)/CAST(v1.year_total AS float) as percentage
+    from v1, v2
+    where v1.prod=v2.prod;
