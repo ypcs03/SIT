@@ -1,0 +1,7 @@
+Host *
+ControlMaster auto
+ControlPath ~/.ssh/sockets/%r@%h-%p
+ControlPersist 600
+#%r remote_user
+#%h hostname
+#%p server port
