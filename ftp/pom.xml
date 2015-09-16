@@ -123,7 +123,7 @@
 				<server.machine>${server.external-dns}</server.machine>
 				<server.ip>${server.internal-ip}</server.ip>
 				<server.home>/home/${server.userid}</server.home>
-				<!-- Test directory. -->
+				<!--Test directory. -->
 				<server.testdir>${server.home}/tmp/cs549/ftp-test</server.testdir>
 				<!-- Root of file system provided by server. -->
 				<server.path>${server.testdir}/root</server.path>
