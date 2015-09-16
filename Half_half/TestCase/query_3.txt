@@ -1,0 +1,15 @@
+SELECT ATTRIBUTE(S):
+cust, month, avg_quant_1, avg_quant, avg_quant_2
+NUMBER OF GROUPING VARIABLES(n):
+2
+GROUPING ATTRIBUTES(V):
+cust, month
+Func-VECT([F]):
+avg_quant, 1_avg_quant, 2_avg_quant
+SELECT CONDITION-VECT([考]):
+1.cust.equals(cust) and 1.month < month
+2.cust.equals(cust) and 2.month > month
+HAVING CONDITION(G):
+
+WHERE CONDITION(W)
+year == 1997

@@ -1,0 +1,14 @@
+SELECT ATTRIBUTE(S):
+prod, month, count_all_3
+NUMBER OF GROUPING VARIABLES(n):
+3
+GROUPING ATTRIBUTES(V):
+prod, month
+Func-VECT([F]):
+1_avg_quant, 2_avg_quant, 3_count_all 
+SELECT CONDITION-VECT([考]):
+1.prod.equals(prod) and 1.month == month-1
+2.prod.equals(prod) and 2.month == month+1
+3.prod.equals(prod) and 3.month == month and 3.quant > 1_avg_quant and 3.quant < 2_avg_quant
+WHERE CONDITION(W)
+year == 1997

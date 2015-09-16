@@ -1,0 +1,13 @@
+SELECT ATTRIBUTE(S):
+prod, quant
+NUMBER OF GROUPING VARIABLES(n):
+2
+GROUPING ATTRIBUTES(V):
+prod, quant
+Func-VECT([F]):
+2_count_prod, 1_count_prod
+SELECT CONDITION-VECT([¿¼]):
+1.prod.equals(prod)
+2.prod.equals(prod) and 2.quant < quant
+HAVING CONDITION(G):
+count_prod_2 == count_prod_1/2

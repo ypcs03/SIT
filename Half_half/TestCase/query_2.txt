@@ -1,0 +1,13 @@
+SELECT ATTRIBUTE(S):
+prod, month, sum_quant_1/sum_quant_2
+NUMBER OF GROUPING VARIABLES(n):
+2
+GROUPING ATTRIBUTES(V):
+prod, month
+Func-VECT([F]):
+1_sum_quant, 2_sum_quant
+SELECT CONDITION-VECT([考]):
+1.prod.equals(prod) and 1.month == month
+2.prod.equals(prod)
+WHERE CONDITION(W)
+year == 1997
