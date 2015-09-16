@@ -244,10 +244,16 @@ public class Client {
 			 */
 			private ServerSocket dataChan = null;
 			private FileOutputStream file = null;
+			private FileInputStream filetosend = null;
 
 			public GetThread(ServerSocket s, FileOutputStream f) {
 				dataChan = s;
 				file = f;
+			}
+			
+			public GetThread(ServerSocket s, FileInputStream f) {
+				dataChan = s;
+				filetosend = f;
 			}
 
 			public void run() {
@@ -256,10 +262,17 @@ public class Client {
 					 * TODO: Complete this thread.
 					 */
 					Socket xfer = dataChan.accept();
-					InputStream is = xfer.getInputStream();
-						
-					//Read the file from the inputstream and write to the file
-					GetFileFromStream(is, file);
+					
+					if(filetosend == null){
+						//Passive mode, get file from server (get method)
+						InputStream is = xfer.getInputStream();
+						GetFileFromStream(is, file);
+					}else{
+						//Active mode, send file to server (put method)
+						OutputStream os = xfer.getOutputStream();
+						GetFileFromStream(filetosend, os);
+					}
+					
 					
 					/*
 					 * End TODO
@@ -331,11 +344,17 @@ public class Client {
 						GetFileFromStream(fileToSend, xfer.getOutputStream());
 						xfer.close();
 					}else if(mode == Mode.ACTIVE){
+						System.out.println("File: " + inputs[1]);
 						FileInputStream fileToSend = new FileInputStream(inputs[1]);
-						svr.put(inputs[1]);
-						Socket xfer2 = dataChan.accept();
 						
-						GetFileFromStream(fileToSend, xfer2.getOutputStream());
+						//Waiting for the server to connect...
+						new Thread(new GetThread(dataChan, fileToSend)).start();
+						System.out.println("Invoking the server put method");
+						svr.put(inputs[1]);
+						/*System.out.println("Waiting for server to connect");
+						Socket xfer2 = dataChan.accept();
+						System.out.println("Connected");
+						GetFileFromStream(fileToSend, xfer2.getOutputStream());*/
 					}else{
 						msgln("GET: No mode set--use port or pasv command.");
 					}

@@ -189,17 +189,20 @@ public class Server extends UnicastRemoteObject implements IServer {
 		/*
 		 * TODO: Finish put (both ACTIVE and PASSIVE).
 		 */
+		Path path = Paths.get(file);
+		file = path.getFileName().toString();
+		
 		switch(mode){
 		case ACTIVE:
+			System.out.println("Connecting to the client...");
 			Socket xfer = new Socket(clientSocket.getAddress(), clientSocket.getPort());
-			FileOutputStream os = new FileOutputStream(pwd() + file);
+			System.out.println("Connected");
+			System.out.println("Ready to receive the file...");
+			FileOutputStream os = new FileOutputStream(path() + file);
 			ReadAndWrite(xfer.getInputStream(), os);
 			xfer.close();
 			break;
 		case PASSIVE:
-			Path p = Paths.get(file);
-			file = p.getFileName().toString();
-			
 			FileOutputStream osf= new FileOutputStream(path() + file);
 			System.out.println("file : " + file);
 			System.out.println("path: " + path());
